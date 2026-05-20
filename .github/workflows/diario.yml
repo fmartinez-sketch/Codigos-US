@@ -4,20 +4,21 @@ on:
   schedule:
     - cron: '0 5 * * *'
   workflow_dispatch:
-  env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Esto quita la advertencia amarilla
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout codigo
-        uses: actions/checkout@v4 # Actualizado a v4
+        uses: actions/checkout@v4
 
       - name: Configurar Python
-        uses: actions/setup-python@v5 # Actualizado a v5 (más estable)
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # Cambiamos de 3.9 a 3.10
+          python-version: '3.10'
 
       - name: Instalar librerías
         run: |
@@ -27,12 +28,12 @@ jobs:
       - name: Ejecutar script
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: python tu_script.py # <--- Asegúrate que este sea el nombre real de tu archivo .py
+        run: python script.py  # <--- Nombre exacto de tu archivo
 
       - name: Guardar cambios en GitHub
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add reporte_acumulado.csv progreso.txt || echo "No hay archivos para añadir"
-          git commit -m "Actualización automática de datos" || echo "No hay cambios para commitear"
+          git add reporte_acumulado.csv progreso.txt || echo "Sin cambios en archivos"
+          git commit -m "Actualización automática de datos" || echo "Nada que commitear"
           git push
