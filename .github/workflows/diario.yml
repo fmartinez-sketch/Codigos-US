@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 5 * * *'
   workflow_dispatch:
+  env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Esto quita la advertencia amarilla
 
 jobs:
   build:
