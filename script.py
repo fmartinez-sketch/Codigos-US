@@ -21,13 +21,17 @@ def buscar_salones(zip_code):
             results = response.get('results', [])
             for place in results:
                 place_id = place.get('place_id')
+                
+                # CORRECCIÓN AQUÍ: 'address_component' en singular para la petición
                 details = gmaps.place(place_id=place_id, 
                                      fields=['name', 'formatted_phone_number', 'website', 
                                              'formatted_address', 'rating', 'user_ratings_total', 
-                                             'address_components']).get('result', {})
+                                             'address_component']).get('result', {})
                 
                 estado = "N/A"
-                for component in details.get('address_components', []):
+                # Aquí se mantiene en plural porque así es como Google devuelve el objeto
+                address_components = details.get('address_components', [])
+                for component in address_components:
                     if 'administrative_area_level_1' in component['types']:
                         estado = component['long_name']
                         break
@@ -56,7 +60,7 @@ if os.path.exists(archivo_zip):
     df_zips = pd.read_csv(archivo_zip, dtype=str)
     zip_list = df_zips.iloc[:, 0].str.zfill(5).unique().tolist()
     
-    # Si el reporte no existe o es muy pequeño, procesar TODO una vez
+    # Si el reporte no existe o está casi vacío, procesar TODO una vez
     es_primera_vez = not os.path.exists(archivo_salida) or os.path.getsize(archivo_salida) < 100
     
     if es_primera_vez:
