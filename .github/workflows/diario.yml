@@ -1,34 +1,38 @@
-name: Busqueda Diaria Google Maps
+name: Ejecución Diaria de Búsqueda de Salones
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # Se ejecuta todos los días a las 12:00 UTC
-  workflow_dispatch:      # Permite ejecutarlo manualmente si quieres
+    # Esto corre a las 12:00 UTC todos los días
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Esto permite que tú lo corras manualmente cuando quieras
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # MUY IMPORTANTE: Da permiso para escribir en el repo
+
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v3
+      - name: Descargar código
+        uses: actions/checkout@v4
 
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Instalar librerias
-        run: pip install -r requirements.txt
+      - name: Instalar librerías
+        run: |
+          pip install requests pandas
 
       - name: Ejecutar script
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: python script.py
 
-      - name: Guardar cambios en GitHub
+      - name: Guardar y subir cambios
         run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
-          git add progreso.txt reporte_acumulado.csv
-          git commit -m "Actualización diaria: $(date)" || echo "No hay cambios"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add reporte_acumulado.csv progreso.txt
+          # El siguiente comando evita que el error detenga el proceso si no hay cambios
+          git commit -m "Actualización automática: $(date)" || echo "Sin cambios para commitear"
           git push
