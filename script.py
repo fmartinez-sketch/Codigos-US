@@ -26,7 +26,7 @@ def buscar_salones_osm(zip_code):
       node["name"~"Salon",i](area.searchArea);
     );
     out center;
-    
+    """
     
     try:
         response = requests.get(overpass_url, params={'data': overpass_query}, timeout=30)
