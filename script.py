@@ -7,18 +7,20 @@ import os
 archivo_zip = "codigos_postales_US.csv"
 archivo_progreso = "progreso.txt"
 archivo_salida = "reporte_acumulado.csv"
-LIMITE_DIARIO = 500  # Puedes subirlo si quieres, ya que es gratis
+LIMITE_DIARIO = 100  # Bajamos a 100 para asegurar que no nos bloqueen por velocidad
 
 def buscar_salones_osm(zip_code):
-    """Busca salones usando la API de Overpass (OpenStreetMap)"""
     all_results = []
-    
-    # Query de Overpass: busca nodos y formas con la etiqueta 'beauty' o 'hair' en el ZIP dado
     overpass_url = "http://overpass-api.de/api/interpreter"
     
-    # Buscamos negocios tipo 'beauty', 'hairdresser' o que tengan 'Salon' en el nombre
+    # IMPORTANTE: Esto evita el error 406. Identifica tu bot.
+    headers = {
+        'User-Agent': 'BuscadorSalonesBot/1.0 (contacto: tu-usuario-github)',
+        'Accept-Language': 'es,en;q=0.9'
+    }
+    
     overpass_query = f"""
-    [out:json][timeout:25];
+    [out:json][timeout:30];
     area["postal_code"="{zip_code}"]["address:country"="US"]->.searchArea;
     (
       node["shop"~"beauty|hairdresser"](area.searchArea);
@@ -29,84 +31,79 @@ def buscar_salones_osm(zip_code):
     """
     
     try:
-        response = requests.get(overpass_url, params={'data': overpass_query}, timeout=30)
+        response = requests.get(overpass_url, params={'data': overpass_query}, headers=headers, timeout=40)
+        
         if response.status_code == 200:
             data = response.json()
-            elements = data.get('elements', [])
-            
-            for el in elements:
+            for el in data.get('elements', []):
                 tags = el.get('tags', {})
-                
-                # Intentar construir la dirección
                 calle = tags.get('addr:street', '')
                 numero = tags.get('addr:housenumber', '')
                 ciudad = tags.get('addr:city', '')
                 estado = tags.get('addr:state', 'N/A')
                 
-                direccion_completa = f"{numero} {calle}, {ciudad}".strip(", ")
+                direccion = f"{numero} {calle}, {ciudad}".strip(", ")
                 
                 all_results.append({
                     'Nombre': tags.get('name', 'Sin nombre'),
                     'Teléfono': tags.get('phone') or tags.get('contact:phone') or 'N/D',
                     'Sitio Web': tags.get('website') or tags.get('contact:website') or 'N/D',
-                    'Dirección': direccion_completa if direccion_completa else "Dirección no disponible",
+                    'Dirección': direccion if direccion else "Dirección no disponible",
                     'Estado': estado,
                     'Rating': 'N/A (OSM)',
                     'Total Reseñas': 'N/A (OSM)',
                     'ZIP Code': zip_code
                 })
+        elif response.status_code == 429:
+            print(f"!!! Servidor saturado (429). Esperando 60 segundos en ZIP {zip_code}...")
+            time.sleep(60)
         else:
-            print(f"Error en API Overpass: {response.status_code}")
+            print(f"Error {response.status_code} en ZIP {zip_code}")
             
     except Exception as e:
-        print(f"Error procesando ZIP {zip_code}: {e}")
-        
+        print(f"Error técnico en ZIP {zip_code}: {e}")
     return all_results
 
 # --- PROCESO PRINCIPAL ---
 if os.path.exists(archivo_zip):
-    # Cargar códigos postales
     df_zips = pd.read_csv(archivo_zip, dtype=str)
     zip_list = df_zips.iloc[:, 0].str.zfill(5).unique().tolist()
-    total_zips = len(zip_list)
-
-    # Leer progreso actual
+    
     indice_inicio = 0
     if os.path.exists(archivo_progreso):
         with open(archivo_progreso, "r") as f:
             try:
-                indice_inicio = int(f.read().strip())
+                linea = f.read().strip()
+                indice_inicio = int(linea) if linea else 0
             except:
                 indice_inicio = 0
 
-    # Si terminamos la lista, reiniciar
-    if indice_inicio >= total_zips:
+    if indice_inicio >= len(zip_list):
+        print("¡Todos los códigos procesados! Reiniciando...")
         indice_inicio = 0
 
-    indice_fin = min(indice_inicio + LIMITE_DIARIO, total_zips)
+    indice_fin = min(indice_inicio + LIMITE_DIARIO, len(zip_list))
     zips_a_procesar = zip_list[indice_inicio:indice_fin]
 
-    print(f"Iniciando: Procesando {len(zips_a_procesar)} códigos (del {indice_inicio} al {indice_fin-1})")
+    print(f"--- Iniciando sesión: {len(zips_a_procesar)} códigos (Índices {indice_inicio} a {indice_fin-1}) ---")
 
     for i, zip_hoy in enumerate(zips_a_procesar):
-        print(f"[{i+1}/{len(zips_a_procesar)}] Buscando en ZIP: {zip_hoy}...")
-        
+        print(f"[{i+1}/{len(zips_a_procesar)}] Buscando en ZIP: {zip_hoy}")
         data = buscar_salones_osm(zip_hoy)
         
         if data:
             df_temp = pd.DataFrame(data)
-            # El header solo se pone si el archivo no existe o está vacío
-            es_nuevo = not os.path.exists(archivo_salida) or os.stat(archivo_salida).st_size == 0
-            df_temp.to_csv(archivo_salida, mode='a', index=False, header=es_nuevo, encoding='utf-8-sig')
-            print(f"   -> Encontrados {len(data)} resultados.")
+            header = not os.path.exists(archivo_salida) or os.stat(archivo_salida).st_size == 0
+            df_temp.to_csv(archivo_salida, mode='a', index=False, header=header, encoding='utf-8-sig')
+            print(f"   -> Guardados {len(data)} resultados.")
         
-        # Guardar progreso después de cada código (por si se corta)
+        # Actualizar progreso inmediatamente
         with open(archivo_progreso, "w") as f:
             f.write(str(indice_inicio + i + 1))
         
-        # Pausa de cortesía para no saturar el servidor gratuito de OSM
-        time.sleep(1.5)
+        # PAUSA VITAL para evitar el error 406/429
+        time.sleep(3) 
 
-    print("¡Sesión completada con éxito!")
+    print("--- Sesión terminada exitosamente ---")
 else:
-    print(f"Error: No se encontró {archivo_zip}")
+    print(f"No se encontró el archivo {archivo_zip}")
